@@ -101,7 +101,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .theme-toggle-btn,
 .retime-toggle-btn,
 .tt-toggle-btn,
-.sounds-toggle-btn {
+.sounds-toggle-btn,
+.time-toggle-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -111,14 +112,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .theme-toggle-btn svg,
 .retime-toggle-btn svg,
 .tt-toggle-btn svg,
-.sounds-toggle-btn svg {
+.sounds-toggle-btn svg,
+.time-toggle-btn svg {
   width: 16px;
   height: 16px;
   fill: currentColor;
   flex-shrink: 0;
 }
 .sounds-toggle-btn.is-open,
-.tt-toggle-btn.is-open {
+.tt-toggle-btn.is-open,
+.time-toggle-btn.is-open {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -130,6 +133,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .retime-toggle-btn:hover {
   border-color: var(--bell);
   filter: brightness(1.03);
+}
+.time-toggle-btn {
+  background: var(--surface2);
+}
+.time-toggle-btn.has-override {
+  border-color: var(--bell);
+  color: var(--bell);
 }
 #adjustPanel[hidden] {
   display: none !important;
@@ -244,7 +254,7 @@ dialog.modal::backdrop {
 .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin-top: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field span { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
-input[type="number"], input[type="time"] {
+input[type="number"], input[type="time"], input[type="date"], input[type="datetime-local"] {
   font: inherit; font-family: var(--font-mono); width: 100%; min-height: 38px; padding: 6px 8px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--surface2); color: var(--ink);
 }
@@ -268,6 +278,14 @@ label.btn { display: inline-flex; align-items: center; }
 
 footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 @media (prefers-reduced-motion: no-preference) { .timeline li { transition: background 0.2s; } }
+
+.virtual-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--bell-soft); border: 1px solid var(--bell); color: var(--ink);
+  margin-left: 6px; vertical-align: middle;
+}
+.virtual-badge[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -279,6 +297,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       <p class="muted" id="today"></p>
     </div>
     <div class="header-actions">
+      <button id="timeBtn" class="time-toggle-btn" aria-label="Change time and date" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+        <span id="timeBtnLabel">Change time &amp; date</span>
+      </button>
       <button id="retimeBtn" class="retime-toggle-btn" aria-label="Prayer ran late — recalculate timetable">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
         <span>Prayer ran late</span>
@@ -300,7 +322,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 
   <section class="panel status" aria-label="Status">
     <div class="stack" style="gap:8px">
-      <span class="label">Time now</span>
+      <span class="label">Time now <span class="virtual-badge" id="virtualBadge" hidden>Virtual</span></span>
       <div class="clock" id="clock">--:--:--</div>
       <div><span class="pill" id="pill"><i></i><span id="pillText">Bells off</span></span></div>
     </div>
@@ -339,6 +361,36 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       <button id="skipWait">The day already started: continue the timetable</button>
     </div>
   </section>
+
+  <!-- Modal for Change Time & Date -->
+  <dialog id="timeModal" class="modal">
+    <div class="stack">
+      <h2>Change time &amp; date</h2>
+      <p class="muted">Set a virtual clock for this page. The bell system will use this time instead of the PC clock. Time keeps ticking forward from the moment you apply it. Useful when the PC clock is wrong, after sleep, or for testing.</p>
+
+      <label class="field">
+        <span>Date</span>
+        <input type="date" id="modalDate" required>
+      </label>
+
+      <label class="field">
+        <span>Time (24-hour)</span>
+        <input type="time" id="modalTime" step="1" required>
+      </label>
+
+      <p class="muted" style="font-size:0.85rem" id="timeModalHint">
+        Currently using the PC system clock.
+      </p>
+
+      <p id="timeModalError" class="muted" style="color: var(--warn); font-size: 0.85rem;" hidden></p>
+
+      <div class="btn-row" style="justify-content: flex-end; margin-top: 8px; flex-wrap: wrap;">
+        <button type="button" id="timeModalReset">Use PC clock</button>
+        <button type="button" id="timeModalCancel">Cancel</button>
+        <button type="button" class="primary" id="timeModalConfirm">Apply virtual time</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Modal for Prayer Late Confirmation -->
   <dialog id="prayerModal" class="modal">
@@ -431,6 +483,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   <footer>
     <p>Keep this page open on the laptop connected to speakers, and set the laptop never to sleep while plugged in.</p>
     <p>After reloading or restarting, press Start bell system once. Your timetable settings and uploaded sounds stay saved in this browser.</p>
+    <p>If the PC clock is wrong or the laptop slept, use <b>Change time &amp; date</b> to set a virtual clock for this page.</p>
   </footer>
 </div>
 
@@ -481,6 +534,97 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       lsSetRaw(k, JSON.stringify(v));
     } catch (e) {}
   }
+
+  /* ---------- Virtual clock (overrides PC date/time for this page) ---------- */
+  // When active: virtualBaseMs = the user-set "now" at apply time
+  //              realBaseMs   = Date.now() at apply time
+  // getNow() returns new Date(virtualBaseMs + (Date.now() - realBaseMs))
+  var virtualBaseMs = null; // null = use real PC clock
+  var realBaseMs = null;
+
+  function isVirtualClock() {
+    return virtualBaseMs !== null && realBaseMs !== null;
+  }
+
+  function getNow() {
+    if (isVirtualClock()) {
+      return new Date(virtualBaseMs + (Date.now() - realBaseMs));
+    }
+    return new Date();
+  }
+
+  function setVirtualClock(dateObj) {
+    virtualBaseMs = dateObj.getTime();
+    realBaseMs = Date.now();
+    lsSet('bell.virtual.v1', { virtualBaseMs: virtualBaseMs, realBaseMs: realBaseMs });
+    updateVirtualUI();
+  }
+
+  function clearVirtualClock() {
+    virtualBaseMs = null;
+    realBaseMs = null;
+    lsSet('bell.virtual.v1', null);
+    updateVirtualUI();
+  }
+
+  /**
+   * After jumping the virtual clock (especially backwards), clear "already rung"
+   * flags for any bell that is still upcoming or within the ring window of the
+   * new "now". Past bells stay marked Rang; current/future ones can ring again.
+   */
+  function resyncFiredToNow() {
+    var now = nowSec();
+    var evs = events();
+    var changed = false;
+    evs.forEach(function (e) {
+      var k = key(e);
+      // Keep only events that finished more than 90s ago as "Rang"
+      if (fired.has(k) && e.t * 60 >= now - 90) {
+        fired.delete(k);
+        changed = true;
+      }
+    });
+    if (changed) saveFired();
+  }
+
+  function loadVirtualClock() {
+    var rec = lsGet('bell.virtual.v1');
+    if (rec && typeof rec.virtualBaseMs === 'number' && typeof rec.realBaseMs === 'number') {
+      // Restore so virtual time continues from where it left off relative to real elapsed time
+      virtualBaseMs = rec.virtualBaseMs;
+      realBaseMs = rec.realBaseMs;
+    }
+  }
+
+  function updateVirtualUI() {
+    var badge = $('virtualBadge');
+    var btn = $('timeBtn');
+    var hint = $('timeModalHint');
+    if (isVirtualClock()) {
+      if (badge) badge.hidden = false;
+      if (btn) {
+        btn.classList.add('has-override');
+        btn.classList.add('is-open');
+        $('timeBtnLabel').textContent = 'Virtual time on';
+      }
+      if (hint) {
+        var n = getNow();
+        hint.textContent = 'Virtual clock is active. Current virtual time: ' +
+          n.toLocaleString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+          '. It keeps advancing from when you applied it.';
+      }
+    } else {
+      if (badge) badge.hidden = true;
+      if (btn) {
+        btn.classList.remove('has-override');
+        btn.classList.remove('is-open');
+        $('timeBtnLabel').textContent = 'Change time & date';
+      }
+      if (hint) hint.textContent = 'Currently using the PC system clock.';
+    }
+  }
+
+  loadVirtualClock();
 
   /* ---------- Theme Management ---------- */
   var sunIconPath = 'M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z';
@@ -536,7 +680,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   var MIN_PERIOD = 5;
 
   /* ---------- Storage helpers (use safe wrappers above) ---------- */
-  function todayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function todayKey() {
+    var d = getNow();
+    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  }
 
   var cfg = Object.assign({}, DEFAULT, lsGet('bell.cfg.v1') || {});
   if (!Array.isArray(cfg.dur) || cfg.dur.length !== 8) cfg.dur = DEFAULT.dur.slice();
@@ -609,7 +756,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     return h + ':' + pad(mi) + ' <small>' + ap + '</small>';
   }
   function fmt12plain(m) { return fmt12(m).replace(/<[^>]+>/g, ''); }
-  function nowSec() { var d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); }
+  function nowSec() {
+    var d = getNow();
+    return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+  }
   function dur(sec) {
     sec = Math.max(0, Math.round(sec));
     var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
@@ -726,7 +876,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   }
   
   function key(e) { return todayKey() + ':' + e.id; }
-  function isSchoolDay() { return cfg.days.indexOf(new Date().getDay()) !== -1; }
+  function isSchoolDay() { return cfg.days.indexOf(getNow().getDay()) !== -1; }
   function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1'); }
   function nextEvent(evs, now) {
     if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
@@ -812,7 +962,8 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   
   function ring(e) {
     playSlot(e.slot);
-    ringLog.unshift({ at: new Date().toTimeString().slice(0, 5), label: e.label });
+    var d = getNow();
+    ringLog.unshift({ at: pad(d.getHours()) + ':' + pad(d.getMinutes()), label: e.label });
     ringLog = ringLog.slice(0, 8); saveLog(); renderRecent();
   }
 
@@ -833,7 +984,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 
   /* ---------- Prayer Late Dialog Prompt ---------- */
   function promptPrayerLateModal() {
-    var d = new Date();
+    var d = getNow();
     var curHHMM = pad(d.getHours()) + ':' + pad(d.getMinutes());
     $('modalStartTime').value = curHHMM;
     $('modalEndTime').value = cfg.endTime || '13:30';
@@ -887,8 +1038,8 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       ring({ id: 'p1', slot: 'p1', label: 'Period 1 starts' });
     }
 
-    updateAll();
-    syncTimetableUI();
+    lastSig = '';
+    forceRefresh();
     showNote('Timetable recalculated: 8 periods ending at ' + fmt12plain(endMin) + '. Interval stays ' + cfg.interval + ' min.');
     return { ok: true };
   }
@@ -926,9 +1077,15 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   function moveBy(n) {
     var p = curPlan();
     planRec = { date: todayKey(), start: p.start + n, dur: p.dur.slice(), interval: p.interval, note: p.note };
-    savePlan(); updateAll();
+    savePlan();
+    forceRefresh();
   }
-  function resetPlan() { planRec = null; lsSet('bell.plan.v1', null); updateAll(); syncTimetableUI(); }
+  function resetPlan() {
+    planRec = null;
+    lsSet('bell.plan.v1', null);
+    resyncFiredToNow();
+    forceRefresh();
+  }
 
   /* ---------- System Tick ---------- */
   function tick() {
@@ -948,8 +1105,17 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 
   /* ---------- Rendering UI ---------- */
   var lastSig = '';
+
+  /** Force full UI refresh without page reload (timeline, next bell, date, etc.) */
+  function forceRefresh() {
+    lastSig = '';
+    updateAll();
+    syncTimetableUI();
+    renderRecent();
+  }
+
   function updateAll() {
-    var now = nowSec(), d = new Date();
+    var now = nowSec(), d = getNow();
     $('clock').innerHTML = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
     var school = isSchoolDay(), gated = isGated();
     var pill = $('pill'), pt = $('pillText');
@@ -984,7 +1150,21 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     } else $('preview').textContent = 'No bells left to adjust today.';
     $('skipWrap').hidden = !(gated && school && armed);
 
-    var sig = [JSON.stringify(evs.map(function (e) { return e.t; })), Array.from(fired).join(','), nx ? nx.id : '-', gated, school, armed, Math.floor(now / 60)].join('|');
+    // Update date display from virtual/real clock
+    $('today').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+      (isVirtualClock() ? ' (virtual)' : '');
+
+    // Include plan start/durations so timetable edits always redraw the list
+    var sig = [
+      JSON.stringify(evs.map(function (e) { return e.t + ':' + e.id; })),
+      Array.from(fired).join(','),
+      nx ? nx.id : '-',
+      gated, school, armed,
+      Math.floor(now / 60),
+      isVirtualClock() ? 'v' : 'r',
+      curPlan().start,
+      (curPlan().dur || []).join(',')
+    ].join('|');
     if (sig !== lastSig) { lastSig = sig; renderTimeline(evs, nx, now, gated, school); }
   }
   
@@ -1041,7 +1221,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       try { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
     }
   });
-  $('skipWait').addEventListener('click', function () { fired.add(todayKey() + ':p1'); saveFired(); updateAll(); });
+  $('skipWait').addEventListener('click', function () { fired.add(todayKey() + ':p1'); saveFired(); forceRefresh(); });
   $('resetShift').addEventListener('click', resetPlan);
   $('customShiftBtn').addEventListener('click', function () { var n = parseInt($('customShift').value, 10); if (!isNaN(n)) moveBy(n); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-shift]'), function (b) {
@@ -1179,42 +1359,190 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     if (e.target === $('soundsModal')) closeSoundsModal();
   });
 
-  function numIn(el, min, max, dflt) { var n = parseInt(el.value, 10); return isNaN(n) ? dflt : Math.min(max, Math.max(min, n)); }
-  $('p1Start').addEventListener('change', function (e) {
-    if (e.target.value) {
-      cfg.p1Start = e.target.value;
-      // Editing base start clears today's custom plan so default applies
-      if (planRec) { planRec = null; savePlan(); }
-      saveCfg(); updateAll(); syncTimetableUI();
+  /* ---------- Change time & date modal ---------- */
+  function openTimeModal() {
+    var d = getNow();
+    $('modalDate').value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    $('modalTime').value = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    var err = $('timeModalError');
+    if (err) { err.hidden = true; err.textContent = ''; }
+    updateVirtualUI();
+    openAppModal('timeModal', 'timeBtn');
+  }
+  function closeTimeModal() {
+    closeAppModal('timeModal', 'timeBtn');
+    // Keep has-override class if still virtual
+    updateVirtualUI();
+  }
+
+  $('timeBtn').addEventListener('click', function () {
+    var modal = $('timeModal');
+    if (modal.open) closeTimeModal();
+    else openTimeModal();
+  });
+  $('timeModalCancel').addEventListener('click', closeTimeModal);
+  $('timeModal').addEventListener('close', function () {
+    updateVirtualUI();
+  });
+  $('timeModal').addEventListener('click', function (e) {
+    if (e.target === $('timeModal')) closeTimeModal();
+  });
+
+  $('timeModalConfirm').addEventListener('click', function () {
+    var dateVal = $('modalDate').value;
+    var timeVal = $('modalTime').value;
+    var err = $('timeModalError');
+    if (!dateVal || !timeVal) {
+      if (err) { err.textContent = 'Please enter both date and time.'; err.hidden = false; }
+      return;
     }
+    // timeVal may be HH:MM or HH:MM:SS
+    var parts = timeVal.split(':');
+    var h = parseInt(parts[0], 10) || 0;
+    var mi = parseInt(parts[1], 10) || 0;
+    var s = parseInt(parts[2], 10) || 0;
+    var dateParts = dateVal.split('-');
+    var y = parseInt(dateParts[0], 10);
+    var mo = parseInt(dateParts[1], 10) - 1;
+    var day = parseInt(dateParts[2], 10);
+    var dt = new Date(y, mo, day, h, mi, s);
+    if (isNaN(dt.getTime())) {
+      if (err) { err.textContent = 'Invalid date or time.'; err.hidden = false; }
+      return;
+    }
+
+    // When changing the virtual day, re-evaluate plan/fired/log for the new "today"
+    var oldKey = todayKey();
+    setVirtualClock(dt);
+    var newKey = todayKey();
+
+    if (oldKey !== newKey) {
+      // Reload plan/fired/log for the new virtual date
+      planRec = lsGet('bell.plan.v1');
+      if (!(planRec && planRec.date === newKey && Array.isArray(planRec.dur) && planRec.dur.length === 8)) planRec = null;
+      firedRec = lsGet('bell.fired.v1');
+      fired = new Set((firedRec && firedRec.date === newKey) ? firedRec.keys : []);
+      logRec = lsGet('bell.log.v1');
+      ringLog = (logRec && logRec.date === newKey) ? logRec.items : [];
+      renderRecent();
+    }
+
+    // Always re-sync fired flags to the new "now" so jumping backwards
+    // (e.g. to 07:50) lets Period 1 and later bells ring again.
+    resyncFiredToNow();
+
+    // If "Wait for me to start Period 1" is on and the virtual clock is at or
+    // past Period 1, treat this as starting the day: ring Period 1 and ungate.
+    var p1Ev = events().filter(function (e) { return e.id === 'p1'; })[0];
+    var nowS = nowSec();
+    if (p1Ev && isGated() && nowS >= p1Ev.t * 60 - 5) {
+      var p1k = key(p1Ev);
+      if (!fired.has(p1k)) {
+        fired.add(p1k);
+        saveFired();
+        if (armed) ring(p1Ev);
+      }
+    }
+
+    if (err) { err.hidden = true; err.textContent = ''; }
+    closeTimeModal();
+    showNote('Virtual clock set. Upcoming bells can ring again from this time. Use “Use PC clock” to return to the system time.');
+    // Apply immediately — no page reload needed
+    lastSig = '';
+    tick();
+    forceRefresh();
   });
-  $('interval').addEventListener('change', function (e) {
-    cfg.interval = numIn(e.target, 1, 90, 20);
+
+  $('timeModalReset').addEventListener('click', function () {
+    clearVirtualClock();
+    // Re-load plan/fired for real today
+    planRec = lsGet('bell.plan.v1');
+    if (!(planRec && planRec.date === todayKey() && Array.isArray(planRec.dur) && planRec.dur.length === 8)) planRec = null;
+    firedRec = lsGet('bell.fired.v1');
+    fired = new Set((firedRec && firedRec.date === todayKey()) ? firedRec.keys : []);
+    logRec = lsGet('bell.log.v1');
+    ringLog = (logRec && logRec.date === todayKey()) ? logRec.items : [];
+    closeTimeModal();
+    showNote('Back to PC system clock.');
+    lastSig = '';
+    tick();
+    forceRefresh();
+  });
+
+  ['modalDate', 'modalTime'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('timeModalConfirm').click();
+      }
+    });
+  });
+
+  function numIn(el, min, max, dflt) { var n = parseInt(el.value, 10); return isNaN(n) ? dflt : Math.min(max, Math.max(min, n)); }
+
+  function applyP1Start(val) {
+    if (!val) return;
+    cfg.p1Start = val;
+    if (planRec) { planRec = null; savePlan(); }
+    saveCfg();
+    resyncFiredToNow();
+    forceRefresh();
+  }
+  function applyInterval(val) {
+    cfg.interval = numIn({ value: val }, 1, 90, 20);
     if (planRec) { planRec.interval = cfg.interval; savePlan(); }
-    saveCfg(); updateAll(); syncTimetableUI();
-  });
-  $('regDelay').addEventListener('change', function (e) { cfg.regDelay = numIn(e.target, 1, 30, 2); saveCfg(); updateAll(); });
-  $('endTime').addEventListener('change', function (e) { if (e.target.value) { cfg.endTime = e.target.value; saveCfg(); updateAll(); syncTimetableUI(); } });
-  $('compress').addEventListener('change', function (e) { cfg.compress = e.target.checked; saveCfg(); });
-  $('manualStart').addEventListener('change', function (e) { cfg.manualStart = e.target.checked; saveCfg(); updateAll(); });
+    saveCfg();
+    resyncFiredToNow();
+    forceRefresh();
+  }
+  function applyRegDelay(val) {
+    cfg.regDelay = numIn({ value: val }, 1, 30, 2);
+    saveCfg();
+    resyncFiredToNow();
+    forceRefresh();
+  }
+  function applyEndTime(val) {
+    if (!val) return;
+    cfg.endTime = val;
+    saveCfg();
+    forceRefresh();
+  }
+  function applyDur(idx, val) {
+    var n = numIn({ value: val }, 1, 120, 40);
+    cfg.dur[Number(idx)] = n;
+    if (planRec && planRec.dur) {
+      planRec.dur[Number(idx)] = n;
+      savePlan();
+    }
+    saveCfg();
+    resyncFiredToNow();
+    forceRefresh();
+  }
+
+  $('p1Start').addEventListener('change', function (e) { applyP1Start(e.target.value); });
+  $('p1Start').addEventListener('input', function (e) { applyP1Start(e.target.value); });
+  $('interval').addEventListener('change', function (e) { applyInterval(e.target.value); });
+  $('interval').addEventListener('input', function (e) { applyInterval(e.target.value); });
+  $('regDelay').addEventListener('change', function (e) { applyRegDelay(e.target.value); });
+  $('regDelay').addEventListener('input', function (e) { applyRegDelay(e.target.value); });
+  $('endTime').addEventListener('change', function (e) { applyEndTime(e.target.value); });
+  $('endTime').addEventListener('input', function (e) { applyEndTime(e.target.value); });
+  $('compress').addEventListener('change', function (e) { cfg.compress = e.target.checked; saveCfg(); forceRefresh(); });
+  $('manualStart').addEventListener('change', function (e) { cfg.manualStart = e.target.checked; saveCfg(); forceRefresh(); });
   $('vol').addEventListener('input', function (e) { cfg.vol = Number(e.target.value); saveCfg(); if (current) current.volume = cfg.vol; });
   $('durGrid').addEventListener('change', function (e) {
     var i = e.target.getAttribute('data-dur'); if (i === null) return;
-    var val = numIn(e.target, 1, 120, 40);
-    cfg.dur[Number(i)] = val;
-    // If today has a custom plan, update that period length too
-    if (planRec && planRec.dur) {
-      planRec.dur[Number(i)] = val;
-      savePlan();
-    }
-    saveCfg(); updateAll(); syncTimetableUI();
+    applyDur(i, e.target.value);
+  });
+  $('durGrid').addEventListener('input', function (e) {
+    var i = e.target.getAttribute('data-dur'); if (i === null) return;
+    applyDur(i, e.target.value);
   });
   $('days').addEventListener('change', function () {
     cfg.days = Array.prototype.filter.call(document.querySelectorAll('[data-day]'), function (c) { return c.checked; }).map(function (c) { return Number(c.getAttribute('data-day')); });
-    saveCfg(); updateAll();
+    saveCfg();
+    forceRefresh();
   });
-
-  $('today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { requestWake(); tick(); } });
 
@@ -1224,6 +1552,9 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     w.onmessage = tick;
   } catch (e) { setInterval(tick, 1000); }
 
+  updateVirtualUI();
+  // If a saved virtual clock puts "now" earlier than previously-rung bells, clear those flags
+  if (isVirtualClock()) resyncFiredToNow();
   renderSounds(); renderRecent(); updateAll(); syncTimetableUI();
   loadSounds().then(renderSounds);
 })();
