@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>Digital Bell System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout styling */
+:root {
+  --bg: #ECEFF2;
+  --surface: #FFFFFF;
+  --surface2: #F3F5F7;
+  --ink: #14202B;
+  --muted: #586573;
+  --line: #D5DBE1;
+  --accent: #0E6B68;
+  --accent-ink: #FFFFFF;
+  --bell: #A96A08;
+  --bell-soft: #F6EAD0;
+  --ok: #2E7D4F;
+  --warn: #B4441F;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0F171E; 
+  --surface: #16212A; 
+  --surface2: #1C2A35; 
+  --ink: #E8EDF1; 
+  --muted: #9AA8B5;
+  --line: #2B3946; 
+  --accent: #4DB6B1; 
+  --accent-ink: #06201F; 
+  --bell: #E3AE45; 
+  --bell-soft: #2E2613;
+  --ok: #5DBE86; 
+  --warn: #E8845C; 
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-inline: 16px; padding-block: 20px 40px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.wrap { max-width: 1200px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.header-titles { display: flex; flex-direction: column; gap: 2px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; transition: background-color 0.2s ease, border-color 0.2s ease; }
+.panel > h2 + .muted { margin-top: 2px; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* status band */
+.status { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 760px) { .status { grid-template-columns: 1fr 1fr auto; align-items: center; gap: 28px; } }
+.clock { font-family: var(--font-mono); font-size: clamp(2.4rem, 9vw, 3.6rem); line-height: 1; font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.clock small { font-size: 0.4em; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+.next-time { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.countdown { font-family: var(--font-mono); color: var(--bell); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 7px; font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--line); }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: block; }
+.pill.on i { background: var(--ok); }
+.pill.on { color: var(--ok); }
+.pill.wait i { background: var(--bell); }
+.pill.wait { color: var(--bell); }
+
+button, .btn {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 9px 14px; min-height: 40px;
+  border: 1px solid var(--line); background: var(--surface2); color: var(--ink);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button.big { padding: 13px 20px; font-size: 1rem; min-height: 48px; }
+button.stop { background: transparent; color: var(--warn); border-color: var(--warn); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.theme-toggle-btn,
+.retime-toggle-btn,
+.tt-toggle-btn,
+.sounds-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+}
+.theme-toggle-btn svg,
+.retime-toggle-btn svg,
+.tt-toggle-btn svg,
+.sounds-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.sounds-toggle-btn.is-open,
+.tt-toggle-btn.is-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.retime-toggle-btn {
+  background: var(--bell-soft);
+  border-color: var(--bell);
+  color: var(--ink);
+}
+.retime-toggle-btn:hover {
+  border-color: var(--bell);
+  filter: brightness(1.03);
+}
+#adjustPanel[hidden] {
+  display: none !important;
+}
+
+.notice { border-radius: 8px; padding: 10px 12px; background: var(--bell-soft); border: 1px solid var(--bell); color: var(--ink); font-size: 0.9rem; }
+.notice[hidden] { display: none; }
+
+/* Modal Dialog */
+dialog.modal {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+dialog.modal.modal-wide {
+  max-width: 560px;
+  max-height: min(88vh, 720px);
+  padding: 0;
+  overflow: hidden;
+}
+dialog.modal.modal-wide[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.modal.modal-wide .modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+dialog.modal.modal-wide .modal-body {
+  padding: 12px 20px 20px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+dialog.modal.modal-wide .modal-close {
+  padding: 6px 10px;
+  min-height: 36px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+dialog.modal::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+.sounds-toggle-btn.is-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* retime */
+.retime { display: grid; gap: 14px; }
+.retime-main { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+.retime-main p { flex: 1 1 260px; min-width: 0; }
+.shift-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.shift-row input[type="number"] { width: 84px; }
+
+/* grid for timeline + setup */
+.cols { display: flex; flex-direction: column; gap: 16px; }
+
+.timeline { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+@media (min-width: 800px) {
+  .timeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+  }
+  .timeline li:nth-child(odd) { border-right: 1px solid var(--line); padding-right: 16px; }
+  .timeline li:nth-child(even) { padding-left: 8px; }
+}
+.timeline li { display: grid; grid-template-columns: 96px 1fr auto; gap: 12px; align-items: center; padding: 10px 8px; border-top: 1px solid var(--line); }
+.timeline li:first-child { border-top: 0; }
+@media (min-width: 800px) {
+  .timeline li:nth-child(1),
+  .timeline li:nth-child(2) { border-top: 0; }
+}
+.timeline .t { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+.timeline .t small { color: var(--muted); font-size: 0.72em; }
+.timeline .what { min-width: 0; overflow-wrap: anywhere; }
+.timeline .what span { display: block; font-size: 0.78rem; color: var(--muted); }
+.timeline .st { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.timeline li.done { opacity: 0.55; }
+.timeline li.done .st { color: var(--ok); }
+.timeline li.passed { opacity: 0.45; }
+.timeline li.next { background: var(--bell-soft); border-radius: 8px; border-top-color: transparent; }
+.timeline li.next .st { color: var(--bell); }
+.timeline li.reg .what { color: var(--accent); }
+.timeline li.gap .what { font-weight: 600; }
+
+.recent ul {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+@media (min-width: 800px) {
+  .recent ul { grid-template-columns: 1fr 1fr; gap: 2px 24px; }
+}
+
+.recent { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 0.85rem; }
+.recent ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+
+/* setup */
+.field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin-top: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field span { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+input[type="number"], input[type="time"] {
+  font: inherit; font-family: var(--font-mono); width: 100%; min-height: 38px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface2); color: var(--ink);
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.days label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+.days input { accent-color: var(--accent); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; width: 100%; }
+
+.sound-list { max-height: 480px; overflow-y: auto; padding-right: 6px; }
+.sound { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.sound:first-of-type { border-top: 0; }
+.sound .meta { min-width: 0; }
+.sound .meta b { font-weight: 600; }
+.sound .meta .file { font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+.sound input[type="file"] { display: none; }
+.sound .btn-row button, .sound .btn-row label { padding: 6px 12px; min-height: 36px; font-size: 0.88rem; }
+label.btn { display: inline-flex; align-items: center; }
+
+footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .timeline li { transition: background 0.2s; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="header-titles">
+      <h1>Digital Bell System</h1>
+      <p class="muted" id="today"></p>
+    </div>
+    <div class="header-actions">
+      <button id="retimeBtn" class="retime-toggle-btn" aria-label="Prayer ran late — recalculate timetable">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+        <span>Prayer ran late</span>
+      </button>
+      <button id="ttToggle" class="tt-toggle-btn" aria-label="View timetable settings" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+        <span id="ttToggleLabel">View Timetable</span>
+      </button>
+      <button id="soundsToggle" class="sounds-toggle-btn" aria-label="Bell audio files" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        <span id="soundsToggleLabel">Audio files</span>
+      </button>
+      <button id="themeToggle" class="theme-toggle-btn" aria-label="Toggle light and dark mode">
+        <svg id="themeIcon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4C12.92 3.04 12.46 3 12 3z"/></svg>
+        <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="panel status" aria-label="Status">
+    <div class="stack" style="gap:8px">
+      <span class="label">Time now</span>
+      <div class="clock" id="clock">--:--:--</div>
+      <div><span class="pill" id="pill"><i></i><span id="pillText">Bells off</span></span></div>
+    </div>
+    <div class="stack" style="gap:6px">
+      <span class="label">Next bell</span>
+      <div class="next-time" id="nextTime">--</div>
+      <div id="nextLabel">--</div>
+      <div class="countdown" id="countdown"></div>
+    </div>
+    <div class="stack" style="gap:8px">
+      <button class="primary big" id="armBtn">Start bell system</button>
+      <button id="stopSound">Stop sound</button>
+      <button id="adjustToggle" aria-expanded="false">Timetable adjustments</button>
+    </div>
+  </section>
+
+  <div class="notice" id="note" hidden></div>
+
+  <section class="panel retime" id="adjustPanel" aria-label="Re-time the day" hidden>
+    <div>
+      <h2>Timetable adjustments</h2>
+      <p class="muted">Use <b>Prayer ran late</b> (top-right) when morning prayer ends — that rebuilds the day. Use the controls below only to nudge remaining bells or reset today’s plan.</p>
+    </div>
+    <p id="preview" class="muted"></p>
+    <p class="muted" id="shiftInfo"></p>
+    <div class="shift-row">
+      <span class="label" style="margin-right:4px">Move remaining bells</span>
+      <button data-shift="-5">&minus;5 min</button>
+      <button data-shift="5">+5 min</button>
+      <button data-shift="10">+10 min</button>
+      <input type="number" id="customShift" value="15" min="-120" max="120" aria-label="Custom minutes">
+      <button id="customShiftBtn">Apply</button>
+      <button id="resetShift">Back to normal timetable</button>
+    </div>
+    <div class="check" id="skipWrap" hidden>
+      <button id="skipWait">The day already started: continue the timetable</button>
+    </div>
+  </section>
+
+  <!-- Modal for Prayer Late Confirmation -->
+  <dialog id="prayerModal" class="modal">
+    <div class="stack">
+      <h2>Prayer ran late</h2>
+      <p class="muted">Enter the time Period&nbsp;1 should start, and confirm when school ends. The time between them (minus interval) is split equally into 8 periods. Interval and departure stay fixed.</p>
+      
+      <label class="field">
+        <span>Period 1 starts at</span>
+        <input type="time" id="modalStartTime" required>
+      </label>
+
+      <label class="field">
+        <span>Departure (school ends)</span>
+        <input type="time" id="modalEndTime" value="13:30" required>
+      </label>
+
+      <div style="font-size: 0.85rem;" class="muted">
+        Interval: <b id="modalIntervalConst">20</b> min (constant)<br>
+        Register marking: <b id="modalRegConst">2</b> min before Period 2 (constant)
+      </div>
+
+      <p id="modalError" class="muted" style="color: var(--warn); font-size: 0.85rem;" hidden></p>
+
+      <div class="btn-row" style="justify-content: flex-end; margin-top: 8px;">
+        <button type="button" id="modalCancel">Cancel</button>
+        <button type="button" class="primary" id="modalConfirm">Confirm &amp; recalculate</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal for Bell Audio Files -->
+  <dialog id="soundsModal" class="modal modal-wide">
+    <div class="modal-head">
+      <div>
+        <h2>Bell audio files</h2>
+        <p class="muted" style="margin-top:4px;font-size:0.88rem">Upload custom sounds per period. Built-in chimes play if no file is set. Usually only needed once.</p>
+      </div>
+      <button type="button" class="modal-close" id="soundsModalClose">Close</button>
+    </div>
+    <div class="modal-body">
+      <div id="sounds" class="sound-list"></div>
+      <div class="field" style="margin-top:12px">
+        <span>Volume (this page only; also set the laptop volume)</span>
+        <input type="range" id="vol" min="0.1" max="1" step="0.05" value="1">
+      </div>
+      <p class="muted" id="idbWarn" hidden style="margin-top:8px"></p>
+    </div>
+  </dialog>
+
+  <!-- Modal for Timetable setup -->
+  <dialog id="timetableModal" class="modal modal-wide">
+    <div class="modal-head">
+      <div>
+        <h2>Timetable</h2>
+        <p class="muted" id="ttLiveNote" style="margin-top:4px;font-size:0.88rem"></p>
+      </div>
+      <button type="button" class="modal-close" id="timetableModalClose">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-grid">
+        <label class="field"><span>Period 1 starts</span><input type="time" id="p1Start"></label>
+        <label class="field"><span>Interval (min)</span><input type="number" id="interval" min="1" max="90"></label>
+        <label class="field"><span>Register before P2 (min)</span><input type="number" id="regDelay" min="1" max="30"></label>
+        <label class="field"><span>Departure (fixed)</span><input type="time" id="endTime"></label>
+      </div>
+      <label class="check" style="margin-top:14px"><input type="checkbox" id="compress"><span><b>Keep departure time when prayer runs late</b><br><span class="muted">All 8 periods are dynamically shortened equally so school firmly ends at departure time.</span></span></label>
+      <span class="label" style="display:block;margin-top:14px">Period lengths (minutes)</span>
+      <div class="field-grid" id="durGrid"></div>
+      <p class="muted" style="margin-top:8px">The interval comes after Period 4. Values update automatically after <b>Prayer ran late</b>.</p>
+      <hr>
+      <label class="check"><input type="checkbox" id="manualStart"><span><b>Wait for me to start Period 1</b><br><span class="muted">No bell rings until you press the start button after prayer. Turn this off to ring Period 1 automatically at 7:50 AM.</span></span></label>
+      <span class="label" style="display:block;margin-top:14px">Ring on these days</span>
+      <div class="days" id="days"></div>
+    </div>
+  </dialog>
+
+  <div class="cols">
+    <section class="panel" aria-label="Today's bells">
+      <h2>Today's bells</h2>
+      <p class="muted" id="daySpan"></p>
+      <ol class="timeline" id="timeline"></ol>
+      <div class="recent">
+        <span class="label">Recently rung</span>
+        <ul id="recent"><li class="muted">Nothing yet today.</li></ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p>Keep this page open on the laptop connected to speakers, and set the laptop never to sleep while plugged in.</p>
+    <p>After reloading or restarting, press Start bell system once. Your timetable settings and uploaded sounds stay saved in this browser.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- Safe storage (works when localStorage is blocked by sandbox) ---------- */
+  var memStore = {};
+  var lsAvailable = false;
+  try {
+    var _t = '__bell_ls_test__';
+    window.localStorage.setItem(_t, '1');
+    window.localStorage.removeItem(_t);
+    lsAvailable = true;
+  } catch (e) {
+    lsAvailable = false;
+  }
+
+  function lsGetRaw(k) {
+    try {
+      if (lsAvailable) {
+        var v = window.localStorage.getItem(k);
+        if (v !== null) return v;
+      }
+    } catch (e) {}
+    return Object.prototype.hasOwnProperty.call(memStore, k) ? memStore[k] : null;
+  }
+  function lsSetRaw(k, v) {
+    memStore[k] = v;
+    try {
+      if (lsAvailable) window.localStorage.setItem(k, v);
+    } catch (e) {}
+  }
+  function lsGet(k) {
+    try {
+      var raw = lsGetRaw(k);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function lsSet(k, v) {
+    try {
+      if (v === null || v === undefined) {
+        delete memStore[k];
+        try { if (lsAvailable) window.localStorage.removeItem(k); } catch (e2) {}
+        return;
+      }
+      lsSetRaw(k, JSON.stringify(v));
+    } catch (e) {}
+  }
+
+  /* ---------- Theme Management ---------- */
+  var sunIconPath = 'M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z';
+  var moonIconPath = 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4C12.92 3.04 12.46 3 12 3z';
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    lsSetRaw('bell.theme.v1', theme);
+    var path = $('themeIcon').querySelector('path');
+    if (theme === 'dark') {
+      path.setAttribute('d', sunIconPath);
+      $('themeLabel').textContent = 'Light Mode';
+    } else {
+      path.setAttribute('d', moonIconPath);
+      $('themeLabel').textContent = 'Dark Mode';
+    }
+  }
+
+  function initTheme() {
+    var savedTheme = lsGetRaw('bell.theme.v1');
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      applyTheme(savedTheme);
+    } else {
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(prefersDark ? 'dark' : 'light');
+    }
+  }
+
+  $('themeToggle').addEventListener('click', function () {
+    var current = document.documentElement.getAttribute('data-theme');
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  });
+
+  initTheme();
+  
+  var SLOTS = [
+    { id: 'p1', name: 'Period 1 audio', note: 'Plays when Period 1 starts.', defaultUrl: 'audios/1st_period.mp3' },
+    { id: 'register', name: 'Register reminder audio', note: 'Plays before Period 2 starts (default 2 min early).', defaultUrl: 'audios/register_marking_time.mp3' },
+    { id: 'p2', name: 'Period 2 audio', note: 'Plays when Period 2 starts.', defaultUrl: 'audios/2nd_period.mp3' },
+    { id: 'p3', name: 'Period 3 audio', note: 'Plays when Period 3 starts.', defaultUrl: 'audios/3rd_period.mp3' },
+    { id: 'p4', name: 'Period 4 audio', note: 'Plays when Period 4 starts.', defaultUrl: 'audios/4th_period.mp3' },
+    { id: 'interval', name: 'Interval bell audio', note: 'Plays when Period 4 ends and interval starts.', defaultUrl: 'audios/interval_start.mp3' },
+    { id: 'p5', name: 'Period 5 audio', note: 'Plays when interval ends / Period 5 starts.', defaultUrl: 'audios/5th_period.mp3' },
+    { id: 'p6', name: 'Period 6 audio', note: 'Plays when Period 6 starts.', defaultUrl: 'audios/6th_period.mp3' },
+    { id: 'p7', name: 'Period 7 audio', note: 'Plays when Period 7 starts.', defaultUrl: 'audios/7th_period.mp3' },
+    { id: 'p8', name: 'Period 8 audio', note: 'Plays when Period 8 starts.', defaultUrl: 'audios/8th_period.mp3' },
+    { id: 'dayend', name: 'Departure bell audio', note: 'Plays at 1:30 PM when school ends.', defaultUrl: 'audio/day_end.mp3' }
+  ];
+  
+  var DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun']];
+  
+  var DEFAULT = { p1Start: '07:50', endTime: '13:30', compress: true, dur: [40, 40, 40, 40, 40, 40, 40, 40], interval: 20, regDelay: 2, manualStart: true, days: [1, 2, 3, 4, 5], vol: 1 };
+  var MIN_PERIOD = 5;
+
+  /* ---------- Storage helpers (use safe wrappers above) ---------- */
+  function todayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+  var cfg = Object.assign({}, DEFAULT, lsGet('bell.cfg.v1') || {});
+  if (!Array.isArray(cfg.dur) || cfg.dur.length !== 8) cfg.dur = DEFAULT.dur.slice();
+  var planRec = lsGet('bell.plan.v1');
+  if (!(planRec && planRec.date === todayKey() && Array.isArray(planRec.dur) && planRec.dur.length === 8)) planRec = null;
+  var firedRec = lsGet('bell.fired.v1');
+  var fired = new Set((firedRec && firedRec.date === todayKey()) ? firedRec.keys : []);
+  var logRec = lsGet('bell.log.v1');
+  var ringLog = (logRec && logRec.date === todayKey()) ? logRec.items : [];
+
+  function saveCfg() { lsSet('bell.cfg.v1', cfg); }
+  function savePlan() { lsSet('bell.plan.v1', planRec); }
+  function saveFired() { lsSet('bell.fired.v1', { date: todayKey(), keys: Array.from(fired) }); }
+  function saveLog() { lsSet('bell.log.v1', { date: todayKey(), items: ringLog }); }
+
+  /* ---------- Audio IndexedDB Storage ---------- */
+  var sounds = {}; 
+  var idbOk = true;
+  function idb() {
+    return new Promise(function (res, rej) {
+      try {
+        if (!window.indexedDB) {
+          idbOk = false;
+          rej(new Error('IndexedDB unavailable'));
+          return;
+        }
+        var r = window.indexedDB.open('bell-sounds', 2);
+        r.onupgradeneeded = function () {
+          var db = r.result;
+          if (!db.objectStoreNames.contains('s')) db.createObjectStore('s');
+        };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { idbOk = false; rej(r.error); };
+      } catch (e) {
+        idbOk = false;
+        rej(e);
+      }
+    });
+  }
+  function idbOp(mode, fn) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        try {
+          var tx = db.transaction('s', mode);
+          var q = fn(tx.objectStore('s'));
+          tx.oncomplete = function () { res(q ? q.result : undefined); };
+          tx.onerror = function () { rej(tx.error); };
+        } catch (e) {
+          rej(e);
+        }
+      });
+    });
+  }
+  function loadSounds() {
+    return Promise.all(SLOTS.map(function (s) {
+      return idbOp('readonly', function (st) { return st.get(s.id); }).then(function (rec) {
+        if (rec && rec.blob) {
+          sounds[s.id] = { name: rec.name, url: URL.createObjectURL(rec.blob), isCustom: true };
+        }
+      });
+    })).catch(function () { idbOk = false; });
+  }
+
+  /* ---------- Time Helpers ---------- */
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function hhmm(str) { var p = String(str).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); }
+  function fmt12(m) {
+    m = Math.round(m); var h = Math.floor(m / 60) % 24, mi = ((m % 60) + 60) % 60;
+    var ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return h + ':' + pad(mi) + ' <small>' + ap + '</small>';
+  }
+  function fmt12plain(m) { return fmt12(m).replace(/<[^>]+>/g, ''); }
+  function nowSec() { var d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); }
+  function dur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + ':' + pad(m) : m) + ':' + pad(s);
+  }
+
+  /* ---------- Schedule Calculation ---------- */
+  function basePlan() { return { start: hhmm(cfg.p1Start), dur: cfg.dur.slice(), interval: cfg.interval, note: '' }; }
+  function curPlan() { return planRec || basePlan(); }
+  function sum(a) { return a.reduce(function (x, y) { return x + y; }, 0); }
+  function planEnd(p) { return p.start + sum(p.dur) + p.interval; }
+
+  /* Equal division algorithm across 8 periods when prayer ends late */
+  function makeCustomPlan(startMin, endMin) {
+    var durArr = [0,0,0,0,0,0,0,0];
+    var intervalConst = cfg.interval; // Constant interval duration
+    var availMinutes = endMin - startMin - intervalConst;
+    var note = '';
+
+    if (availMinutes <= 0) {
+      availMinutes = MIN_PERIOD * 8;
+      note = 'Departure adjusted because available time was too short.';
+    }
+
+    var baseLen = Math.floor(availMinutes / 8);
+    var remainder = availMinutes % 8;
+
+    for (var i = 0; i < 8; i++) {
+      durArr[i] = baseLen + (i < remainder ? 1 : 0);
+    }
+
+    if (!note) {
+      note = '8 periods equally divided (' + durArr[0] + ' min each) to end at ' + fmt12plain(endMin) + '. Interval stays ' + intervalConst + ' min.';
+    }
+
+    return {
+      start: startMin,
+      dur: durArr,
+      interval: intervalConst,
+      note: note,
+      shortened: true,
+      from: 0
+    };
+  }
+
+  function makePlan(ev, nowMin) {
+    var p = curPlan(), dur = p.dur.slice(), start = p.start, note = '';
+    var endMin = hhmm(cfg.endTime), from = 0, intervalAhead = false, first;
+    if (ev.id === 'end') {
+      var p8 = p.start + sum(dur.slice(0, 7)) + p.interval;
+      dur[7] = Math.max(1, nowMin - p8);
+      return { start: start, dur: dur, interval: p.interval, note: p.note, shortened: false, from: 8 };
+    }
+    if (ev.id === 'int') {
+      var p4 = p.start + sum(dur.slice(0, 3));
+      dur[3] = Math.max(1, nowMin - p4);
+      from = 4; intervalAhead = true; first = nowMin;
+    } else {
+      var k = parseInt(ev.id.slice(1), 10) - 1;
+      var past = sum(dur.slice(0, k)) + (k >= 4 ? p.interval : 0);
+      start = nowMin - past;
+      from = k; intervalAhead = k <= 3; first = nowMin;
+    }
+    var n = 8 - from, shortened = false;
+    var need = sum(dur.slice(from)) + (ev.id === 'int' ? p.interval : (intervalAhead ? p.interval : 0));
+    if (cfg.compress && first + need > endMin) {
+      var avail = endMin - first - (intervalAhead ? p.interval : 0);
+      var base = Math.floor(avail / n), rem = avail - base * n;
+      if (base < MIN_PERIOD) { base = MIN_PERIOD; rem = 0; note = 'Not enough time to keep periods at ' + MIN_PERIOD + ' mins minimum; departure shifted.'; }
+      for (var j = 0; j < n; j++) dur[from + j] = base + (j < rem ? 1 : 0);
+      shortened = true;
+      if (!note) note = 'Periods divided equally so school firmly ends at departure (' + fmt12plain(endMin) + ').';
+    }
+    return { start: start, dur: dur, interval: p.interval, note: note, shortened: shortened, from: from };
+  }
+  
+  function lens(pl) {
+    var r = pl.dur.slice(pl.from || 0);
+    if (!r.length) return '';
+    var lo = Math.min.apply(null, r), hi = Math.max.apply(null, r);
+    return lo === hi ? lo + ' min' : lo + ' to ' + hi + ' min';
+  }
+
+  function events() {
+    var p = curPlan(), t = p.start, evs = [];
+    // Register marking: N minutes before Period 2 starts (not after Period 1)
+    var regMins = Math.min(Math.max(1, cfg.regDelay || 1), Math.max(1, p.dur[0] - 1));
+    for (var i = 0; i < 8; i++) {
+      var slotKey = 'p' + (i + 1);
+      var label = 'Period ' + (i + 1) + ' starts';
+      var act = 'Start Period ' + (i + 1) + ' now';
+      if (i === 4) { label = 'Interval ends, Period 5 starts'; }
+      evs.push({ id: slotKey, slot: slotKey, label: label, act: act, t: t, kind: 'Bell', len: p.dur[i] });
+      if (i === 0) {
+        var p2Start = t + p.dur[0];
+        evs.push({
+          id: 'reg',
+          slot: 'register',
+          label: 'Register marking reminder',
+          act: '',
+          t: p2Start - regMins,
+          kind: 'Reminder'
+        });
+      }
+      t += p.dur[i];
+      if (i === 3) {
+        evs.push({ id: 'int', slot: 'interval', label: 'Interval starts (' + p.interval + ' min)', act: 'Start the interval now', t: t, kind: 'Interval' });
+        t += p.interval;
+      }
+    }
+    evs.push({ id: 'end', slot: 'dayend', label: 'Departure / School ends', act: 'End the school day now', t: t, kind: 'Bell' });
+    evs.sort(function (a, b) { return a.t - b.t; });
+    return evs;
+  }
+  
+  function key(e) { return todayKey() + ':' + e.id; }
+  function isSchoolDay() { return cfg.days.indexOf(new Date().getDay()) !== -1; }
+  function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1'); }
+  function nextEvent(evs, now) {
+    if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
+    return evs.filter(function (e) { return !fired.has(key(e)) && e.t * 60 > now; })[0] || null;
+  }
+  function retimeTarget(evs) {
+    if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
+    return evs.filter(function (e) { return e.slot !== 'register' && !fired.has(key(e)); })[0] || null;
+  }
+
+  /* ---------- Audio Engine ---------- */
+  var ctx = null, master = null, current = null, armed = false, wakeLock = null;
+  function ensureCtx() {
+    try {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+    } catch (e) {}
+  }
+  function strike(f, t0, len) {
+    var g = ctx.createGain(); g.connect(master);
+    [[1, 1], [2.76, 0.45], [5.4, 0.2], [8.9, 0.1]].forEach(function (p) {
+      var o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f * p[0]; og.gain.value = p[1];
+      o.connect(og); og.connect(g); o.start(t0); o.stop(t0 + len);
+    });
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+  }
+  
+  function synth(slot) {
+    ensureCtx(); if (!ctx) return;
+    master = ctx.createGain(); master.gain.value = cfg.vol; master.connect(ctx.destination);
+    var t0 = ctx.currentTime + 0.05;
+    if (slot === 'register') {
+      [[659, 0], [784, 0.55], [988, 1.1]].forEach(function (p) { strike(p[0], t0 + p[1], 1.3); });
+    } else if (slot === 'interval') {
+      [[523, 0], [523, 1.1], [523, 2.2]].forEach(function (p) { strike(p[0], t0 + p[1], 2.0); });
+    } else if (slot === 'dayend') {
+      [[392, 0], [392, 1.2], [392, 2.4], [330, 3.6]].forEach(function (p) { strike(p[0], t0 + p[1], 2.4); });
+    } else {
+      [[784, 0], [784, 0.9]].forEach(function (p) { strike(p[0], t0 + p[1], 1.6); });
+    }
+  }
+  
+  function stopAudio() {
+    if (current) { try { current.pause(); } catch (e) {} current = null; }
+    if (master) { try { master.disconnect(); } catch (e) {} master = null; }
+  }
+
+  function getSlotConfig(slot) {
+    for (var i = 0; i < SLOTS.length; i++) {
+      if (SLOTS[i].id === slot) return SLOTS[i];
+    }
+    return null;
+  }
+  
+  function playSlot(slot) {
+    stopAudio();
+    var slotDef = getSlotConfig(slot);
+    var targetUrl = null;
+
+    if (sounds[slot] && sounds[slot].url) {
+      targetUrl = sounds[slot].url;
+    } else if (slotDef && slotDef.defaultUrl) {
+      targetUrl = slotDef.defaultUrl;
+    }
+
+    if (targetUrl) {
+      var a = new Audio(targetUrl);
+      a.volume = cfg.vol;
+      current = a;
+      var p = a.play();
+      if (p && p.catch) {
+        p.catch(function () {
+          synth(slot);
+        });
+      }
+    } else {
+      synth(slot);
+    }
+  }
+  
+  function ring(e) {
+    playSlot(e.slot);
+    ringLog.unshift({ at: new Date().toTimeString().slice(0, 5), label: e.label });
+    ringLog = ringLog.slice(0, 8); saveLog(); renderRecent();
+  }
+
+  /* ---------- Control & System State ---------- */
+  function showNote(msg) { var n = $('note'); if (msg) { n.textContent = msg; n.hidden = false; } else n.hidden = true; }
+  function requestWake() {
+    try { if (navigator.wakeLock && armed && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; }).catch(function () {}); } catch (e) {}
+  }
+  function arm() {
+    ensureCtx(); armed = true; requestWake(); showNote('');
+    updateAll();
+  }
+  function disarm() {
+    armed = false; stopAudio();
+    try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null;
+    updateAll();
+  }
+
+  /* ---------- Prayer Late Dialog Prompt ---------- */
+  function promptPrayerLateModal() {
+    var d = new Date();
+    var curHHMM = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    $('modalStartTime').value = curHHMM;
+    $('modalEndTime').value = cfg.endTime || '13:30';
+    $('modalIntervalConst').textContent = cfg.interval;
+    $('modalRegConst').textContent = cfg.regDelay;
+    var err = $('modalError');
+    if (err) { err.hidden = true; err.textContent = ''; }
+
+    var modal = $('prayerModal');
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      // Fallback for browsers without <dialog>
+      var startT = prompt('Enter Period 1 Start Time (HH:MM):', curHHMM);
+      if (!startT) return;
+      var endT = prompt('Confirm Departure Time (HH:MM):', cfg.endTime || '13:30');
+      if (!endT) return;
+      executeRetime(startT, endT);
+    }
+  }
+
+  function executeRetime(startStr, endStr) {
+    var startMin = hhmm(startStr);
+    var endMin = hhmm(endStr);
+
+    if (!startStr || !endStr || isNaN(startMin) || isNaN(endMin)) {
+      return { ok: false, msg: 'Please enter both start and departure times.' };
+    }
+    if (endMin <= startMin) {
+      return { ok: false, msg: 'Departure must be after Period 1 start time.' };
+    }
+
+    if (!armed) arm();
+
+    // Keep departure time in settings if the user confirmed a different end time
+    if (endStr && endStr !== cfg.endTime) {
+      cfg.endTime = endStr;
+      if ($('endTime')) $('endTime').value = endStr;
+      saveCfg();
+    }
+
+    var pl = makeCustomPlan(startMin, endMin);
+    planRec = { date: todayKey(), start: pl.start, dur: pl.dur, interval: pl.interval, note: pl.note };
+    savePlan();
+
+    // Mark Period 1 as started and ring its bell
+    var p1Key = todayKey() + ':p1';
+    if (!fired.has(p1Key)) {
+      fired.add(p1Key);
+      saveFired();
+      ring({ id: 'p1', slot: 'p1', label: 'Period 1 starts' });
+    }
+
+    updateAll();
+    syncTimetableUI();
+    showNote('Timetable recalculated: 8 periods ending at ' + fmt12plain(endMin) + '. Interval stays ' + cfg.interval + ' min.');
+    return { ok: true };
+  }
+
+  $('modalCancel').addEventListener('click', function () {
+    var err = $('modalError');
+    if (err) { err.hidden = true; err.textContent = ''; }
+    $('prayerModal').close();
+  });
+
+  $('modalConfirm').addEventListener('click', function () {
+    var startVal = $('modalStartTime').value;
+    var endVal = $('modalEndTime').value;
+    var err = $('modalError');
+    var result = executeRetime(startVal, endVal);
+    if (result && result.ok) {
+      if (err) { err.hidden = true; err.textContent = ''; }
+      $('prayerModal').close();
+    } else if (err) {
+      err.textContent = (result && result.msg) || 'Could not recalculate. Check the times.';
+      err.hidden = false;
+    }
+  });
+
+  // Allow Enter key in time fields to confirm
+  ['modalStartTime', 'modalEndTime'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('modalConfirm').click();
+      }
+    });
+  });
+
+  function moveBy(n) {
+    var p = curPlan();
+    planRec = { date: todayKey(), start: p.start + n, dur: p.dur.slice(), interval: p.interval, note: p.note };
+    savePlan(); updateAll();
+  }
+  function resetPlan() { planRec = null; lsSet('bell.plan.v1', null); updateAll(); syncTimetableUI(); }
+
+  /* ---------- System Tick ---------- */
+  function tick() {
+    var now = nowSec();
+    if (armed && isSchoolDay() && !isGated()) {
+      var evs = events(), changed = false;
+      evs.forEach(function (e) {
+        var k = key(e);
+        if (fired.has(k) || e.t * 60 > now) return;
+        fired.add(k); changed = true;
+        if (now - e.t * 60 <= 90) ring(e);
+      });
+      if (changed) saveFired();
+    }
+    updateAll();
+  }
+
+  /* ---------- Rendering UI ---------- */
+  var lastSig = '';
+  function updateAll() {
+    var now = nowSec(), d = new Date();
+    $('clock').innerHTML = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    var school = isSchoolDay(), gated = isGated();
+    var pill = $('pill'), pt = $('pillText');
+    pill.className = 'pill' + (armed ? (gated && school ? ' wait' : ' on') : '');
+    pt.textContent = !armed ? 'Bells off' : !school ? 'Bells on, no school today' : gated ? 'Bells on, waiting for Period 1' : 'Bells on';
+    $('armBtn').textContent = armed ? 'Turn bells off' : 'Start bell system';
+    $('armBtn').className = armed ? 'big stop' : 'primary big';
+
+    var evs = events(), nx = nextEvent(evs, now);
+    if (!school) {
+      $('nextTime').textContent = '--'; $('nextLabel').textContent = 'No bells scheduled today'; $('countdown').textContent = '';
+    } else if (gated) {
+      $('nextTime').textContent = 'Waiting'; $('nextLabel').textContent = 'Period 1 starts when you press the start button'; $('countdown').textContent = 'Planned for ' + fmt12plain(hhmm(cfg.p1Start));
+    } else if (nx) {
+      $('nextTime').innerHTML = fmt12(nx.t); $('nextLabel').textContent = nx.label; $('countdown').textContent = 'in ' + dur(nx.t * 60 - now);
+    } else {
+      $('nextTime').textContent = 'Done'; $('nextLabel').textContent = 'No more bells today'; $('countdown').textContent = '';
+    }
+
+    var tg = retimeTarget(evs);
+    // Always allow opening the prayer-late dialog so the day can be recalculated
+    $('retimeBtn').disabled = false;
+    var cp = curPlan();
+    if (!planRec) $('shiftInfo').textContent = 'Today is on normal timetable. Departure at ' + fmt12plain(planEnd(cp)) + '.';
+    else $('shiftInfo').textContent = 'Today\'s timetable was dynamically adjusted. Period lengths: ' + cp.dur.join(', ') + ' min. Departure at ' + fmt12plain(planEnd(cp)) + '. ' + (cp.note || '') + ' Resets tomorrow.';
+    if (tg) {
+      var nm2 = d.getHours() * 60 + d.getMinutes(), pv = makePlan(tg, nm2);
+      var endAt = pv.start + sum(pv.dur) + pv.interval;
+      $('preview').textContent = tg.id === 'end' ? '' :
+        'If starting now (' + fmt12plain(nm2) + '): 8 periods of approx ' + lens(pv) +
+        ', departure firmly at ' + fmt12plain(endAt) + (pv.note && !pv.shortened ? '. ' + pv.note : '.');
+    } else $('preview').textContent = 'No bells left to adjust today.';
+    $('skipWrap').hidden = !(gated && school && armed);
+
+    var sig = [JSON.stringify(evs.map(function (e) { return e.t; })), Array.from(fired).join(','), nx ? nx.id : '-', gated, school, armed, Math.floor(now / 60)].join('|');
+    if (sig !== lastSig) { lastSig = sig; renderTimeline(evs, nx, now, gated, school); }
+  }
+  
+  function renderTimeline(evs, nx, now, gated, school) {
+    $('timeline').innerHTML = evs.map(function (e) {
+      var done = fired.has(key(e));
+      var isNext = nx && nx.id === e.id && school;
+      var passed = !done && !gated && e.t * 60 < now - 90;
+      var cls = [done ? 'done' : '', isNext ? 'next' : '', passed ? 'passed' : '', e.slot === 'register' ? 'reg' : '', e.slot === 'interval' ? 'gap' : ''].join(' ');
+      var st = done ? 'Rang' : isNext ? 'Next' : passed ? 'Passed' : 'Planned';
+      return '<li class="' + cls + '"><span class="t">' + fmt12(e.t) + '</span><span class="what">' + e.label + '<span>' + e.kind + (e.len ? ' &middot; period is ' + e.len + ' min' : '') + '</span></span><span class="st">' + st + '</span></li>';
+    }).join('');
+    var first = evs[0].t, last = evs[evs.length - 1].t;
+    $('daySpan').textContent = 'School day ' + fmt12plain(first) + ' to ' + fmt12plain(last);
+  }
+  
+  function renderRecent() {
+    $('recent').innerHTML = ringLog.length ? ringLog.map(function (r) { return '<li><span class="mono">' + r.at + '</span> ' + r.label + '</li>'; }).join('') : '<li class="muted">Nothing yet today.</li>';
+  }
+  
+  function renderSounds() {
+    $('sounds').innerHTML = SLOTS.map(function (s) {
+      var userSound = sounds[s.id];
+      var statusText = '';
+      if (userSound && userSound.isCustom) {
+        statusText = 'Custom file: ' + userSound.name;
+      } else if (s.defaultUrl) {
+        statusText = 'Default file: ' + s.defaultUrl;
+      } else {
+        statusText = 'Built-in chime';
+      }
+
+      return '<div class="sound"><div class="meta"><b>' + s.name + '</b><div class="muted" style="font-size:.85rem">' + s.note + '</div><div class="file">' + statusText + '</div></div>' +
+        '<div class="btn-row"><button data-test="' + s.id + '">Test</button>' +
+        '<label class="btn" for="file-' + s.id + '">' + (userSound && userSound.isCustom ? 'Replace file' : 'Upload custom file') + '</label>' +
+        '<input type="file" id="file-' + s.id + '" accept="audio/*" data-slot="' + s.id + '">' +
+        (userSound && userSound.isCustom ? '<button data-remove="' + s.id + '">Reset to default</button>' : '') + '</div></div>';
+    }).join('');
+    $('idbWarn').hidden = idbOk;
+    if (!idbOk) $('idbWarn').textContent = 'This browser cannot save audio files (private mode). Uploads will reset on reload.';
+  }
+
+  /* ---------- Event Wiring ---------- */
+  $('armBtn').addEventListener('click', function () { armed ? disarm() : arm(); });
+  $('stopSound').addEventListener('click', stopAudio);
+  $('retimeBtn').addEventListener('click', promptPrayerLateModal);
+  $('adjustToggle').addEventListener('click', function () {
+    var panel = $('adjustPanel');
+    var open = panel.hidden;
+    panel.hidden = !open;
+    $('adjustToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    $('adjustToggle').textContent = open ? 'Hide adjustments' : 'Timetable adjustments';
+    if (open) {
+      try { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    }
+  });
+  $('skipWait').addEventListener('click', function () { fired.add(todayKey() + ':p1'); saveFired(); updateAll(); });
+  $('resetShift').addEventListener('click', resetPlan);
+  $('customShiftBtn').addEventListener('click', function () { var n = parseInt($('customShift').value, 10); if (!isNaN(n)) moveBy(n); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-shift]'), function (b) {
+    b.addEventListener('click', function () { moveBy(parseInt(b.getAttribute('data-shift'), 10)); });
+  });
+  
+  $('sounds').addEventListener('click', function (ev) {
+    var t = ev.target.getAttribute('data-test'), r = ev.target.getAttribute('data-remove');
+    if (t) { ensureCtx(); playSlot(t); }
+    if (r) {
+      if (sounds[r]) { try { URL.revokeObjectURL(sounds[r].url); } catch (e) {} delete sounds[r]; }
+      idbOp('readwrite', function (st) { return st.delete(r); }).catch(function () {});
+      renderSounds();
+    }
+  });
+  
+  $('sounds').addEventListener('change', function (ev) {
+    var slot = ev.target.getAttribute('data-slot'); if (!slot) return;
+    var f = ev.target.files && ev.target.files[0]; if (!f) return;
+    if (sounds[slot]) { try { URL.revokeObjectURL(sounds[slot].url); } catch (e) {} }
+    sounds[slot] = { name: f.name, url: URL.createObjectURL(f), isCustom: true };
+    idbOp('readwrite', function (st) { return st.put({ name: f.name, blob: f }, slot); }).catch(function () { idbOk = false; renderSounds(); });
+    renderSounds();
+  });
+
+  // Settings
+  $('p1Start').value = cfg.p1Start;
+  $('interval').value = cfg.interval;
+  $('regDelay').value = cfg.regDelay;
+  $('endTime').value = cfg.endTime;
+  $('compress').checked = !!cfg.compress;
+  $('manualStart').checked = !!cfg.manualStart;
+  $('vol').value = cfg.vol;
+  $('durGrid').innerHTML = cfg.dur.map(function (v, i) {
+    return '<label class="field"><span>Period ' + (i + 1) + '</span><input type="number" min="1" max="120" data-dur="' + i + '" value="' + v + '"></label>';
+  }).join('');
+  $('days').innerHTML = DAYS.map(function (d) {
+    return '<label><input type="checkbox" data-day="' + d[0] + '"' + (cfg.days.indexOf(d[0]) !== -1 ? ' checked' : '') + '>' + d[1] + '</label>';
+  }).join('');
+
+  /* Sync Timetable panel fields with the active plan (including Prayer ran late) */
+  function minsToHHMM(m) {
+    m = ((Math.round(m) % 1440) + 1440) % 1440;
+    return pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+  }
+  function syncTimetableUI() {
+    var p = curPlan();
+    var startHHMM = minsToHHMM(p.start);
+    if ($('p1Start') && document.activeElement !== $('p1Start')) {
+      $('p1Start').value = startHHMM;
+    }
+    if ($('endTime') && document.activeElement !== $('endTime')) {
+      $('endTime').value = cfg.endTime;
+    }
+    if ($('interval') && document.activeElement !== $('interval')) {
+      $('interval').value = p.interval;
+    }
+    var inputs = document.querySelectorAll('#durGrid input[data-dur]');
+    for (var i = 0; i < inputs.length; i++) {
+      var idx = Number(inputs[i].getAttribute('data-dur'));
+      if (document.activeElement !== inputs[i] && p.dur[idx] != null) {
+        inputs[i].value = p.dur[idx];
+      }
+    }
+    var note = $('ttLiveNote');
+    if (note) {
+      if (planRec) {
+        note.textContent = 'Today adjusted by Prayer ran late — periods: ' + p.dur.join(', ') + ' min. Resets tomorrow.';
+      } else {
+        note.textContent = 'Showing default timetable settings.';
+      }
+    }
+  }
+
+  /* Shared modal helpers */
+  function openAppModal(modalId, toggleId) {
+    var modal = $(modalId);
+    if (toggleId) {
+      $(toggleId).classList.add('is-open');
+      $(toggleId).setAttribute('aria-expanded', 'true');
+    }
+    if (typeof modal.showModal === 'function') modal.showModal();
+    else modal.setAttribute('open', '');
+  }
+  function closeAppModal(modalId, toggleId) {
+    var modal = $(modalId);
+    if (toggleId) {
+      $(toggleId).classList.remove('is-open');
+      $(toggleId).setAttribute('aria-expanded', 'false');
+    }
+    if (typeof modal.close === 'function') modal.close();
+    else modal.removeAttribute('open');
+  }
+
+  /* View Timetable popup */
+  function openTimetableModal() {
+    syncTimetableUI();
+    openAppModal('timetableModal', 'ttToggle');
+  }
+  function closeTimetableModal() {
+    closeAppModal('timetableModal', 'ttToggle');
+  }
+  $('ttToggle').addEventListener('click', function () {
+    var modal = $('timetableModal');
+    if (modal.open) closeTimetableModal();
+    else openTimetableModal();
+  });
+  $('timetableModalClose').addEventListener('click', closeTimetableModal);
+  $('timetableModal').addEventListener('close', function () {
+    $('ttToggle').classList.remove('is-open');
+    $('ttToggle').setAttribute('aria-expanded', 'false');
+  });
+  $('timetableModal').addEventListener('click', function (e) {
+    if (e.target === $('timetableModal')) closeTimetableModal();
+  });
+
+  /* Audio files popup */
+  function openSoundsModal() {
+    openAppModal('soundsModal', 'soundsToggle');
+  }
+  function closeSoundsModal() {
+    closeAppModal('soundsModal', 'soundsToggle');
+  }
+  $('soundsToggle').addEventListener('click', function () {
+    var modal = $('soundsModal');
+    if (modal.open) closeSoundsModal();
+    else openSoundsModal();
+  });
+  $('soundsModalClose').addEventListener('click', closeSoundsModal);
+  $('soundsModal').addEventListener('close', function () {
+    $('soundsToggle').classList.remove('is-open');
+    $('soundsToggle').setAttribute('aria-expanded', 'false');
+  });
+  $('soundsModal').addEventListener('click', function (e) {
+    if (e.target === $('soundsModal')) closeSoundsModal();
+  });
+
+  function numIn(el, min, max, dflt) { var n = parseInt(el.value, 10); return isNaN(n) ? dflt : Math.min(max, Math.max(min, n)); }
+  $('p1Start').addEventListener('change', function (e) {
+    if (e.target.value) {
+      cfg.p1Start = e.target.value;
+      // Editing base start clears today's custom plan so default applies
+      if (planRec) { planRec = null; savePlan(); }
+      saveCfg(); updateAll(); syncTimetableUI();
+    }
+  });
+  $('interval').addEventListener('change', function (e) {
+    cfg.interval = numIn(e.target, 1, 90, 20);
+    if (planRec) { planRec.interval = cfg.interval; savePlan(); }
+    saveCfg(); updateAll(); syncTimetableUI();
+  });
+  $('regDelay').addEventListener('change', function (e) { cfg.regDelay = numIn(e.target, 1, 30, 2); saveCfg(); updateAll(); });
+  $('endTime').addEventListener('change', function (e) { if (e.target.value) { cfg.endTime = e.target.value; saveCfg(); updateAll(); syncTimetableUI(); } });
+  $('compress').addEventListener('change', function (e) { cfg.compress = e.target.checked; saveCfg(); });
+  $('manualStart').addEventListener('change', function (e) { cfg.manualStart = e.target.checked; saveCfg(); updateAll(); });
+  $('vol').addEventListener('input', function (e) { cfg.vol = Number(e.target.value); saveCfg(); if (current) current.volume = cfg.vol; });
+  $('durGrid').addEventListener('change', function (e) {
+    var i = e.target.getAttribute('data-dur'); if (i === null) return;
+    var val = numIn(e.target, 1, 120, 40);
+    cfg.dur[Number(i)] = val;
+    // If today has a custom plan, update that period length too
+    if (planRec && planRec.dur) {
+      planRec.dur[Number(i)] = val;
+      savePlan();
+    }
+    saveCfg(); updateAll(); syncTimetableUI();
+  });
+  $('days').addEventListener('change', function () {
+    cfg.days = Array.prototype.filter.call(document.querySelectorAll('[data-day]'), function (c) { return c.checked; }).map(function (c) { return Number(c.getAttribute('data-day')); });
+    saveCfg(); updateAll();
+  });
+
+  $('today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { requestWake(); tick(); } });
+
+  // Background-safe web worker timer
+  try {
+    var w = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},1000)'], { type: 'text/javascript' })));
+    w.onmessage = tick;
+  } catch (e) { setInterval(tick, 1000); }
+
+  renderSounds(); renderRecent(); updateAll(); syncTimetableUI();
+  loadSounds().then(renderSounds);
+})();
+</script>
+</body>
+</html>
