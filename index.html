@@ -335,6 +335,8 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     <div class="stack" style="gap:8px">
       <button class="primary big" id="armBtn">Start bell system</button>
       <button id="stopSound">Stop sound</button>
+       <button id="morningBtn" class="primary">Start morning audio</button>
+       <button id="stopMorning">Stop morning audio for today</button>
       <button id="adjustToggle" aria-expanded="false">Timetable adjustments</button>
     </div>
   </section>
@@ -362,6 +364,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     </div>
   </section>
 
+  <dialog id="hymnModal" class="modal"><div class="stack"><h2>Start bell system</h2><p>Play the school hymn automatically at its scheduled time today?</p><label class="check"><input type="checkbox" id="hymnYes" checked><span>Yes, play school hymn</span></label><div class="btn-row"><button id="hymnCancel">Cancel</button><button class="primary" id="hymnConfirm">Start bell system</button></div></div></dialog>
   <!-- Modal for Change Time & Date -->
   <dialog id="timeModal" class="modal">
     <div class="stack">
@@ -462,7 +465,16 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       <div class="field-grid" id="durGrid"></div>
       <p class="muted" style="margin-top:8px">The interval comes after Period 4. Values update automatically after <b>Prayer ran late</b>.</p>
       <hr>
-      <label class="check"><input type="checkbox" id="manualStart"><span><b>Wait for me to start Period 1</b><br><span class="muted">No bell rings until you press the start button after prayer. Turn this off to ring Period 1 automatically at 7:50 AM.</span></span></label>
+       <h3>Additional school audio times</h3>
+       <div class="field-grid">
+         <label class="field"><span>Morning Song</span><input type="time" id="morning1Time"></label>
+         <label class="field"><span>Morning Bell 1</span><input type="time" id="morning2Time"></label>
+         <label class="field"><span>Morning Bell 2</span><input type="time" id="morning3Time"></label>
+         <label class="field"><span>School Hymn</span><input type="time" id="hymnTime"></label>
+       </div>
+       <p class="muted" style="margin-top:8px">Morning recordings use the separate Start morning audio button. School hymn is enabled or skipped when starting bells.</p>
+       <hr>
+       <label class="check"><input type="checkbox" id="manualStart"><span><b>Wait for me to start Period 1</b><br><span class="muted">No bell rings until you press the start button after prayer. Turn this off to ring Period 1 automatically at 7:50 AM.</span></span></label>
       <span class="label" style="display:block;margin-top:14px">Ring on these days</span>
       <div class="days" id="days"></div>
     </div>
@@ -661,6 +673,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   initTheme();
   
   var SLOTS = [
+    { id:'morning1', name:'Morning Song', note:'Scheduled morning song (default 7:21 AM).', defaultUrl:'audios/morning_song.mp3' },
+    { id:'morning2', name:'Morning Bell 1', note:'First morning bell (default 7:25 AM).', defaultUrl:'audios/audio_1.mp3' },
+    { id:'morning3', name:'Morning Bell 2', note:'Second morning bell (default 7:30 AM).', defaultUrl:'audios/audio_2.mp3' },
+    { id:'hymn', name:'School Hymn', note:'Optional recording after Period 8.', defaultUrl:'audios/school_hymn.mp3' },
     { id: 'p1', name: 'Period 1 audio', note: 'Plays when Period 1 starts.', defaultUrl: 'audios/1st_period.mp3' },
     { id: 'register', name: 'Register reminder audio', note: 'Plays before Period 2 starts (default 2 min early).', defaultUrl: 'audios/register_marking_time.mp3' },
     { id: 'p2', name: 'Period 2 audio', note: 'Plays when Period 2 starts.', defaultUrl: 'audios/2nd_period.mp3' },
@@ -676,7 +692,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   
   var DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun']];
   
-  var DEFAULT = { p1Start: '07:50', endTime: '13:30', compress: true, dur: [40, 40, 40, 40, 40, 40, 40, 40], interval: 20, regDelay: 2, manualStart: true, days: [1, 2, 3, 4, 5], vol: 1 };
+  var DEFAULT = { p1Start: '07:50', endTime: '13:30', compress: true, dur: [40, 40, 40, 40, 40, 40, 40, 40], interval: 20, regDelay: 2, manualStart: true, days: [1, 2, 3, 4, 5], vol: 1, morning1Time:'07:21', morning2Time:'07:25', morning3Time:'07:30', hymnTime:'13:33' };
   var MIN_PERIOD = 5;
 
   /* ---------- Storage helpers (use safe wrappers above) ---------- */
@@ -693,6 +709,8 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   var fired = new Set((firedRec && firedRec.date === todayKey()) ? firedRec.keys : []);
   var logRec = lsGet('bell.log.v1');
   var ringLog = (logRec && logRec.date === todayKey()) ? logRec.items : [];
+  var hymnEnabled = lsGet('bell.hymn.day')?.date === todayKey() ? !!lsGet('bell.hymn.day').enabled : null;
+  var morningActive = false, morningStopped = false;
 
   function saveCfg() { lsSet('bell.cfg.v1', cfg); }
   function savePlan() { lsSet('bell.plan.v1', planRec); }
@@ -871,6 +889,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       }
     }
     evs.push({ id: 'end', slot: 'dayend', label: 'Departure / School ends', act: 'End the school day now', t: t, kind: 'Bell' });
+    evs.push({id:'morning1',slot:'morning1',label:'Morning Song',act:'',t:hhmm(cfg.morning1Time),kind:'Morning audio'});
+    evs.push({id:'morning2',slot:'morning2',label:'Morning Bell 1',act:'',t:hhmm(cfg.morning2Time),kind:'Morning audio'});
+    evs.push({id:'morning3',slot:'morning3',label:'Morning Bell 2',act:'',t:hhmm(cfg.morning3Time),kind:'Morning audio'});
+    evs.push({id:'hymn',slot:'hymn',label:'School Hymn',act:'',t:hhmm(cfg.hymnTime),kind:'Audio'});
     evs.sort(function (a, b) { return a.t - b.t; });
     return evs;
   }
@@ -880,11 +902,11 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1'); }
   function nextEvent(evs, now) {
     if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
-    return evs.filter(function (e) { return !fired.has(key(e)) && e.t * 60 > now; })[0] || null;
+    return evs.filter(function (e) { return !['morning1','morning2','morning3'].includes(e.id) && (e.id !== 'hymn' || hymnEnabled === true) && !fired.has(key(e)) && e.t * 60 > now; })[0] || null;
   }
   function retimeTarget(evs) {
     if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
-    return evs.filter(function (e) { return e.slot !== 'register' && !fired.has(key(e)); })[0] || null;
+    return evs.filter(function (e) { return e.slot !== 'register' && e.id !== 'hymn' && !fired.has(key(e)); })[0] || null;
   }
 
   /* ---------- Audio Engine ---------- */
@@ -955,8 +977,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
           synth(slot);
         });
       }
-    } else {
+    } else if (slot !== 'hymn' && !['morning1','morning2','morning3'].includes(slot)) {
       synth(slot);
+    } else {
+      showNote('Upload an audio file for ' + (slot === 'hymn' ? 'School Hymn' : slot) + ' in Audio files.');
     }
   }
   
@@ -1090,10 +1114,20 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   /* ---------- System Tick ---------- */
   function tick() {
     var now = nowSec();
-    if (armed && isSchoolDay() && !isGated()) {
+    if (morningActive && !morningStopped && isSchoolDay()) {
+      ['morning1','morning2','morning3'].forEach(function(id, i){
+        var names=['Morning Song','Morning Bell 1','Morning Bell 2'];
+        var t = hhmm(cfg[['morning1Time','morning2Time','morning3Time'][i]])*60, k=todayKey()+':'+id;
+        if (now>=t && !fired.has(k)) { fired.add(k); saveFired(); if (now-t<=90) ring({id:id,slot:id,label:names[i]}); }
+      });
+    }
+    if (armed && isSchoolDay()) {
       var evs = events(), changed = false;
       evs.forEach(function (e) {
         var k = key(e);
+        if (['morning1','morning2','morning3'].includes(e.id)) return; // Morning audio has independent controls
+        if (e.id === 'hymn' && hymnEnabled !== true) return;
+        if (e.id !== 'hymn' && isGated()) return;
         if (fired.has(k) || e.t * 60 > now) return;
         fired.add(k); changed = true;
         if (now - e.t * 60 <= 90) ring(e);
@@ -1159,7 +1193,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       JSON.stringify(evs.map(function (e) { return e.t + ':' + e.id; })),
       Array.from(fired).join(','),
       nx ? nx.id : '-',
-      gated, school, armed,
+      gated, school, armed, hymnEnabled, morningActive, morningStopped,
       Math.floor(now / 60),
       isVirtualClock() ? 'v' : 'r',
       curPlan().start,
@@ -1171,13 +1205,18 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   function renderTimeline(evs, nx, now, gated, school) {
     $('timeline').innerHTML = evs.map(function (e) {
       var done = fired.has(key(e));
-      var isNext = nx && nx.id === e.id && school;
+      var isNext = nx && nx.id === e.id && school && !(e.id === 'hymn' && hymnEnabled !== true);
       var passed = !done && !gated && e.t * 60 < now - 90;
+      var skippedHymn = e.id === 'hymn' && hymnEnabled === false;
+      var isMorning = ['morning1','morning2','morning3'].includes(e.id);
+      var skippedMorning = isMorning && morningStopped;
+      if (isMorning) { isNext = false; passed = !done && e.t * 60 < now - 90; }
       var cls = [done ? 'done' : '', isNext ? 'next' : '', passed ? 'passed' : '', e.slot === 'register' ? 'reg' : '', e.slot === 'interval' ? 'gap' : ''].join(' ');
-      var st = done ? 'Rang' : isNext ? 'Next' : passed ? 'Passed' : 'Planned';
+      var actuallyPlayed = !isMorning || ringLog.some(function(r){ return r.label === e.label; });
+      var st = skippedHymn || skippedMorning ? 'Not planned' : done ? (actuallyPlayed ? 'Rang' : 'Passed') : isNext ? 'Next' : passed ? 'Passed' : 'Planned';
       return '<li class="' + cls + '"><span class="t">' + fmt12(e.t) + '</span><span class="what">' + e.label + '<span>' + e.kind + (e.len ? ' &middot; period is ' + e.len + ' min' : '') + '</span></span><span class="st">' + st + '</span></li>';
     }).join('');
-    var first = evs[0].t, last = evs[evs.length - 1].t;
+    var first = curPlan().start, last = planEnd(curPlan());
     $('daySpan').textContent = 'School day ' + fmt12plain(first) + ' to ' + fmt12plain(last);
   }
   
@@ -1208,7 +1247,28 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   }
 
   /* ---------- Event Wiring ---------- */
-  $('armBtn').addEventListener('click', function () { armed ? disarm() : arm(); });
+  $('armBtn').addEventListener('click', function () {
+    if (armed) { disarm(); return; }
+    $('hymnYes').checked = true;
+    $('hymnModal').showModal();
+  });
+  $('hymnCancel').addEventListener('click',function(){ $('hymnModal').close(); });
+  $('hymnConfirm').addEventListener('click',function(){
+    hymnEnabled=$('hymnYes').checked;
+    lsSet('bell.hymn.day',{date:todayKey(),enabled:hymnEnabled});
+    $('hymnModal').close(); arm(); forceRefresh();
+  });
+  $('morningBtn').addEventListener('click',function(){
+    ensureCtx(); morningActive=true; morningStopped=false;
+    $('morningBtn').textContent='Morning audio enabled';
+    showNote('Morning recordings enabled. They will play at their scheduled times while this page stays active.'); tick();
+  });
+  $('stopMorning').addEventListener('click',function(){
+    morningStopped=true; morningActive=false; stopAudio();
+    ['morning1','morning2','morning3'].forEach(function(id){fired.add(todayKey()+':'+id);}); saveFired();
+    $('morningBtn').textContent='Start morning audio';
+    showNote('Morning audio stopped for today.');
+  });
   $('stopSound').addEventListener('click', stopAudio);
   $('retimeBtn').addEventListener('click', promptPrayerLateModal);
   $('adjustToggle').addEventListener('click', function () {
@@ -1248,6 +1308,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   });
 
   // Settings
+  ['morning1Time','morning2Time','morning3Time','hymnTime'].forEach(function(id){$(id).value=cfg[id]; $(id).addEventListener('change',function(){if(!this.value)return;cfg[id]=this.value;saveCfg();forceRefresh();});});
   $('p1Start').value = cfg.p1Start;
   $('interval').value = cfg.interval;
   $('regDelay').value = cfg.regDelay;
@@ -1424,25 +1485,12 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       fired = new Set((firedRec && firedRec.date === newKey) ? firedRec.keys : []);
       logRec = lsGet('bell.log.v1');
       ringLog = (logRec && logRec.date === newKey) ? logRec.items : [];
-      renderRecent();
+      hymnEnabled = null; morningActive=false; morningStopped=false; renderRecent();
     }
 
     // Always re-sync fired flags to the new "now" so jumping backwards
     // (e.g. to 07:50) lets Period 1 and later bells ring again.
     resyncFiredToNow();
-
-    // If "Wait for me to start Period 1" is on and the virtual clock is at or
-    // past Period 1, treat this as starting the day: ring Period 1 and ungate.
-    var p1Ev = events().filter(function (e) { return e.id === 'p1'; })[0];
-    var nowS = nowSec();
-    if (p1Ev && isGated() && nowS >= p1Ev.t * 60 - 5) {
-      var p1k = key(p1Ev);
-      if (!fired.has(p1k)) {
-        fired.add(p1k);
-        saveFired();
-        if (armed) ring(p1Ev);
-      }
-    }
 
     if (err) { err.hidden = true; err.textContent = ''; }
     closeTimeModal();
