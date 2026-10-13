@@ -590,8 +590,8 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     var changed = false;
     evs.forEach(function (e) {
       var k = key(e);
-      // Keep only events that finished more than 90s ago as "Rang"
-      if (fired.has(k) && e.t * 60 >= now - 90) {
+      // Keep only events that finished more than 3s ago as already processed
+      if (fired.has(k) && e.t * 60 >= now - 3) {
         fired.delete(k);
         changed = true;
       }
@@ -899,9 +899,9 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   
   function key(e) { return todayKey() + ':' + e.id; }
   function isSchoolDay() { return cfg.days.indexOf(getNow().getDay()) !== -1; }
-  function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1'); }
+  function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1') && nowSec() <= curPlan().start * 60 + 3; }
   function nextEvent(evs, now) {
-    if (isGated()) return evs.filter(function (e) { return e.id === 'p1'; })[0];
+    if (isGated()) return evs.filter(function (e) { return e.id === 'p1' && e.t * 60 >= now; })[0] || null;
     return evs.filter(function (e) { return !['morning1','morning2','morning3'].includes(e.id) && (e.id !== 'hymn' || hymnEnabled === true) && !fired.has(key(e)) && e.t * 60 > now; })[0] || null;
   }
   function retimeTarget(evs) {
@@ -1041,7 +1041,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       return { ok: false, msg: 'Departure must be after Period 1 start time.' };
     }
 
-    if (!armed) arm();
+    // Recalculating the timetable must never activate the bell system.
 
     // Keep departure time in settings if the user confirmed a different end time
     if (endStr && endStr !== cfg.endTime) {
@@ -1054,17 +1054,12 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     planRec = { date: todayKey(), start: pl.start, dur: pl.dur, interval: pl.interval, note: pl.note };
     savePlan();
 
-    // Mark Period 1 as started and ring its bell
-    var p1Key = todayKey() + ':p1';
-    if (!fired.has(p1Key)) {
-      fired.add(p1Key);
-      saveFired();
-      ring({ id: 'p1', slot: 'p1', label: 'Period 1 starts' });
-    }
+    // Do not mark Period 1 as rung or play audio here.
+    // Only the separate Start bell system action enables automatic bells.
 
     lastSig = '';
     forceRefresh();
-    showNote('Timetable recalculated: 8 periods ending at ' + fmt12plain(endMin) + '. Interval stays ' + cfg.interval + ' min.');
+    showNote('Timetable recalculated: 8 periods ending at ' + fmt12plain(endMin) + '. Interval stays ' + cfg.interval + ' min. ' + (armed ? 'Bell system remains ON.' : 'Bell system is OFF — click Start bell system when ready.'));
     return { ok: true };
   }
 
@@ -1118,7 +1113,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
       ['morning1','morning2','morning3'].forEach(function(id, i){
         var names=['Morning Song','Morning Bell 1','Morning Bell 2'];
         var t = hhmm(cfg[['morning1Time','morning2Time','morning3Time'][i]])*60, k=todayKey()+':'+id;
-        if (now>=t && !fired.has(k)) { fired.add(k); saveFired(); if (now-t<=90) ring({id:id,slot:id,label:names[i]}); }
+        if (now>=t && !fired.has(k)) { fired.add(k); saveFired(); if (now-t<=3) ring({id:id,slot:id,label:names[i]}); }
       });
     }
     if (armed && isSchoolDay()) {
@@ -1130,7 +1125,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
         if (e.id !== 'hymn' && isGated()) return;
         if (fired.has(k) || e.t * 60 > now) return;
         fired.add(k); changed = true;
-        if (now - e.t * 60 <= 90) ring(e);
+        if (now - e.t * 60 <= 3) ring(e);
       });
       if (changed) saveFired();
     }
@@ -1162,7 +1157,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     if (!school) {
       $('nextTime').textContent = '--'; $('nextLabel').textContent = 'No bells scheduled today'; $('countdown').textContent = '';
     } else if (gated) {
-      $('nextTime').textContent = 'Waiting'; $('nextLabel').textContent = 'Period 1 starts when you press the start button'; $('countdown').textContent = 'Planned for ' + fmt12plain(hhmm(cfg.p1Start));
+      $('nextTime').textContent = 'Waiting'; $('nextLabel').textContent = 'Period 1 starts when you press the start button'; $('countdown').textContent = 'Planned for ' + fmt12plain(curPlan().start);
     } else if (nx) {
       $('nextTime').innerHTML = fmt12(nx.t); $('nextLabel').textContent = nx.label; $('countdown').textContent = 'in ' + dur(nx.t * 60 - now);
     } else {
@@ -1206,13 +1201,13 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     $('timeline').innerHTML = evs.map(function (e) {
       var done = fired.has(key(e));
       var isNext = nx && nx.id === e.id && school && !(e.id === 'hymn' && hymnEnabled !== true);
-      var passed = !done && !gated && e.t * 60 < now - 90;
+      var passed = !done && !gated && e.t * 60 < now - 3;
       var skippedHymn = e.id === 'hymn' && hymnEnabled === false;
       var isMorning = ['morning1','morning2','morning3'].includes(e.id);
       var skippedMorning = isMorning && morningStopped;
-      if (isMorning) { isNext = false; passed = !done && e.t * 60 < now - 90; }
+      if (isMorning) { isNext = false; passed = !done && e.t * 60 < now - 3; }
       var cls = [done ? 'done' : '', isNext ? 'next' : '', passed ? 'passed' : '', e.slot === 'register' ? 'reg' : '', e.slot === 'interval' ? 'gap' : ''].join(' ');
-      var actuallyPlayed = !isMorning || ringLog.some(function(r){ return r.label === e.label; });
+      var actuallyPlayed = ringLog.some(function(r){ return r.label === e.label; });
       var st = skippedHymn || skippedMorning ? 'Not planned' : done ? (actuallyPlayed ? 'Rang' : 'Passed') : isNext ? 'Next' : passed ? 'Passed' : 'Planned';
       return '<li class="' + cls + '"><span class="t">' + fmt12(e.t) + '</span><span class="what">' + e.label + '<span>' + e.kind + (e.len ? ' &middot; period is ' + e.len + ' min' : '') + '</span></span><span class="st">' + st + '</span></li>';
     }).join('');
@@ -1494,7 +1489,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 
     if (err) { err.hidden = true; err.textContent = ''; }
     closeTimeModal();
-    showNote('Virtual clock set. Upcoming bells can ring again from this time. Use “Use PC clock” to return to the system time.');
+    showNote('Virtual clock set. Past bells will be skipped; only bells at their scheduled time can ring. Use “Use PC clock” to return to the system time.');
     // Apply immediately — no page reload needed
     lastSig = '';
     tick();
