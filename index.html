@@ -899,7 +899,7 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
   
   function key(e) { return todayKey() + ':' + e.id; }
   function isSchoolDay() { return cfg.days.indexOf(getNow().getDay()) !== -1; }
-  function isGated() { return cfg.manualStart && !fired.has(todayKey() + ':p1') && nowSec() <= curPlan().start * 60 + 3; }
+  function isGated() { return cfg.manualStart && !armed && !fired.has(todayKey() + ':p1') && nowSec() <= curPlan().start * 60 + 3; }
   function nextEvent(evs, now) {
     if (isGated()) return evs.filter(function (e) { return e.id === 'p1' && e.t * 60 >= now; })[0] || null;
     return evs.filter(function (e) { return !['morning1','morning2','morning3'].includes(e.id) && (e.id !== 'hymn' || hymnEnabled === true) && !fired.has(key(e)) && e.t * 60 > now; })[0] || null;
@@ -997,8 +997,17 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     try { if (navigator.wakeLock && armed && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; }).catch(function () {}); } catch (e) {}
   }
   function arm() {
+    // Synchronize the latest timetable and discard bells already in the past.
+    refreshSavedSettings();
+    var now = nowSec();
+    events().forEach(function(e) {
+      if (['morning1','morning2','morning3'].includes(e.id)) return;
+      if (e.t * 60 < now) fired.add(key(e));
+    });
+    saveFired();
     ensureCtx(); armed = true; requestWake(); showNote('');
-    updateAll();
+    tick();
+    forceRefresh();
   }
   function disarm() {
     armed = false; stopAudio();
@@ -1077,6 +1086,10 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     if (result && result.ok) {
       if (err) { err.hidden = true; err.textContent = ''; }
       $('prayerModal').close();
+      // Immediately reload the newly saved plan into application state and
+      // redraw every timetable/status element, without reloading the browser
+      // (a browser reload would stop the bell scheduler).
+      refreshEverything();
     } else if (err) {
       err.textContent = (result && result.msg) || 'Could not recalculate. Check the times.';
       err.hidden = false;
@@ -1134,6 +1147,19 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
 
   /* ---------- Rendering UI ---------- */
   var lastSig = '';
+
+  // Read persisted settings before actions, without reloading the page or
+  // resetting the running bell system. Unsaved form edits remain untouched.
+  function refreshSavedSettings() {
+    var stored = lsGet('bell.cfg.v1');
+    if (stored) {
+      cfg = Object.assign({}, DEFAULT, stored);
+      if (!Array.isArray(cfg.dur) || cfg.dur.length !== 8) cfg.dur = DEFAULT.dur.slice();
+    }
+    var storedPlan = lsGet('bell.plan.v1');
+    planRec = storedPlan && storedPlan.date === todayKey() &&
+      Array.isArray(storedPlan.dur) && storedPlan.dur.length === 8 ? storedPlan : null;
+  }
 
   /** Force full UI refresh without page reload (timeline, next bell, date, etc.) */
   function forceRefresh() {
@@ -1587,7 +1613,34 @@ footer { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
     forceRefresh();
   });
 
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { requestWake(); tick(); } });
+  // Re-read saved configuration after every button/feature interaction.
+  // This is an application-data refresh, NOT a browser page reload:
+  // it keeps audio, the armed state, and open dialogs intact.
+  function refreshEverything() {
+    refreshSavedSettings();
+    lastSig = '';
+    updateAll();
+    renderRecent();
+    // Do not overwrite fields while the user is editing the timetable.
+    if (!$('timetableModal').open) syncTimetableUI();
+  }
+
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest('button, label.btn, [data-shift]')) return;
+    // Run after the button's own handler has saved its changes.
+    setTimeout(refreshEverything, 0);
+  });
+  document.addEventListener('change', function () {
+    setTimeout(refreshEverything, 0);
+  });
+  // Also synchronize after edits to timetable fields, without stealing focus.
+  document.addEventListener('input', function (event) {
+    if (!event.target.closest('#timetableModal, #adjustPanel')) return;
+    setTimeout(function () { lastSig = ''; updateAll(); renderRecent(); }, 0);
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { refreshSavedSettings(); requestWake(); tick(); refreshEverything(); }
+  });
 
   // Background-safe web worker timer
   try {
